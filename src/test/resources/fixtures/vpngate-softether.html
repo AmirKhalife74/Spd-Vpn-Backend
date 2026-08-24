@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<body>
+<table id="vg_hosts_table_id">
+    <tr>
+        <th>Server</th><th>Sessions</th><th>Quality</th><th>Logging</th><th>SSL-VPN</th><th>OpenVPN</th>
+    </tr>
+    <tr>
+        <td>vpn-udp.example.test<br>198.51.100.10</td><td>10</td><td>fast</td><td>2 weeks</td>
+        <td>SSL-VPN<br>TCP: 443<br>UDP: Supported</td>
+        <td><a href="do_openvpn.aspx?fqdn=vpn-udp.example.test&amp;ip=198.51.100.10&amp;tcp=443&amp;udp=1194">Config</a></td>
+    </tr>
+    <tr>
+        <td>html-name.example.test<br>203.0.113.20</td><td>5</td><td>fast</td><td>2 weeks</td>
+        <td>SSL-VPN<br>TCP: 995<br>UDP: Supported</td>
+        <td><a href="do_openvpn.aspx?fqdn=html-name.example.test&amp;ip=203.0.113.20&amp;tcp=443&amp;udp=1194">Config</a></td>
+    </tr>
+    <tr>
+        <td>no-softether.example.test<br>192.0.2.30</td><td>3</td><td>fair</td><td>2 weeks</td>
+        <td>Not Supported</td>
+        <td><a href="do_openvpn.aspx?fqdn=no-softether.example.test&amp;ip=192.0.2.30&amp;tcp=443&amp;udp=1194">Config</a></td>
+    </tr>
+    <tr>
+        <td>bad-port.example.test<br>192.0.2.40</td><td>2</td><td>fair</td><td>2 weeks</td>
+        <td>SSL-VPN<br>TCP: 70000</td>
+        <td><a href="do_openvpn.aspx?fqdn=bad-port.example.test&amp;ip=192.0.2.40&amp;tcp=443&amp;udp=1194">Config</a></td>
+    </tr>
+    <tr>
+        <td>malformed-port.example.test<br>192.0.2.41</td><td>2</td><td>fair</td><td>2 weeks</td>
+        <td>SSL-VPN<br>TCP: unknown</td>
+        <td><a href="do_openvpn.aspx?fqdn=malformed-port.example.test&amp;ip=192.0.2.41&amp;tcp=443&amp;udp=1194">Config</a></td>
+    </tr>
+</table>
+
+<table id="vg_hosts_table_id">
+    <tr>
+        <th>Server</th><th>Sessions</th><th>Quality</th><th>Logging</th><th>SSL-VPN</th><th>OpenVPN</th>
+    </tr>
+    <tr>
+        <td>VPN-HOST-MATCH.OPENGW.NET.<br>192.0.2.77</td><td>1</td><td>fair</td><td>2 weeks</td>
+        <td>SSL-VPN<br>TCP: 1865<br>UDP: Supported</td>
+        <td><a href="do_openvpn.aspx?fqdn=VPN-HOST-MATCH.OPENGW.NET.&amp;ip=192.0.2.77&amp;tcp=1865&amp;udp=1194">Config</a></td>
+    </tr>
+</table>
+</body>
+</html>

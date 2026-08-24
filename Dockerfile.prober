@@ -1,0 +1,39 @@
+FROM eclipse-temurin:17-jdk-jammy AS build
+
+WORKDIR /workspace
+
+COPY gradlew gradlew.bat ./
+COPY gradle ./gradle
+COPY settings.gradle.kts build.gradle.kts gradle.properties ./
+COPY prober/build.gradle.kts ./prober/build.gradle.kts
+
+RUN chmod +x gradlew \
+    && ./gradlew --no-daemon :prober:dependencies
+
+COPY prober/src ./prober/src
+
+RUN ./gradlew --no-daemon :prober:test :prober:installDist
+
+
+FROM eclipse-temurin:17-jre-jammy
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates openvpn \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 spdvpn-prober \
+    && useradd --system \
+        --uid 10001 \
+        --gid spdvpn-prober \
+        --home-dir /app \
+        --shell /usr/sbin/nologin \
+        spdvpn-prober
+
+WORKDIR /app
+
+COPY --from=build --chown=10001:10001 \
+    /workspace/prober/build/install/spd-vpn-prober/ \
+    /app/
+
+USER 10001:10001
+
+ENTRYPOINT ["/app/bin/spd-vpn-prober"]

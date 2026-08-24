@@ -1,0 +1,362 @@
+openapi: 3.1.0
+info:
+  title: SPD VPN Backend API
+  version: 0.1.0
+  description: Cached VPN Gate catalog API for SPD VPN clients.
+servers:
+  - url: https://api.spdvpn.app
+paths:
+  /health/live:
+    get:
+      summary: Process liveness
+      responses:
+        "200":
+          description: Process is alive
+          content:
+            text/plain:
+              schema:
+                type: string
+                const: ok
+  /v1/health:
+    get:
+      summary: Catalog readiness and freshness
+      responses:
+        "200":
+          description: A catalog is available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: No usable catalog is available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /v1/countries:
+    get:
+      summary: List countries represented in the current catalog
+      responses:
+        "200":
+          description: Country list
+          headers:
+            ETag:
+              schema: { type: string }
+            X-Data-Stale:
+              schema: { type: boolean }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CountriesResponse"
+        "503":
+          $ref: "#/components/responses/CatalogUnavailable"
+  /v1/servers:
+    get:
+      summary: List VPN server summaries
+      parameters:
+        - in: query
+          name: country
+          schema: { type: string, pattern: "^[A-Za-z]{2}$" }
+        - in: query
+          name: protocol
+          schema: { $ref: "#/components/schemas/VpnProtocol" }
+        - in: query
+          name: health
+          description: Optional server-health filter; omitted means all health states.
+          schema:
+            type: string
+            enum: [healthy, degraded, unhealthy, unknown]
+        - in: query
+          name: minScore
+          schema: { type: integer, format: int64, minimum: 0 }
+        - in: query
+          name: maxPingMs
+          schema: { type: integer, minimum: 0 }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: sort
+          schema:
+            type: string
+            enum: [score, speed, ping, uptime, users, sessions]
+            default: score
+        - in: query
+          name: order
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: Server page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServersResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          $ref: "#/components/responses/CatalogUnavailable"
+  /v1/servers/{id}/config:
+    get:
+      summary: Get a decoded OpenVPN profile
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OpenVPN profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerConfigResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogUnavailable"
+  /internal/v1/probe-results:
+    post:
+      summary: Submit one probe result from the isolated probe worker
+      description: Internal-only route. Disabled with a 404 response when PROBER_SHARED_SECRET is blank or missing, and blocked by the public Caddy example.
+      x-internal: true
+      security:
+        - ProberToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProbeResult"
+      responses:
+        "200":
+          description: Probe result accepted and applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProbeResultAcceptedResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogUnavailable"
+components:
+  securitySchemes:
+    ProberToken:
+      type: apiKey
+      in: header
+      name: X-SpdVpn-Prober-Token
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Unauthorized:
+      description: Missing or invalid prober token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    CatalogUnavailable:
+      description: No usable catalog exists yet
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+  schemas:
+    VpnProtocol:
+      type: string
+      enum: [TCP, UDP, UNKNOWN]
+    ServerHealthStatus:
+      type: string
+      enum: [UNKNOWN, HEALTHY, DEGRADED, UNHEALTHY]
+    SourceMetadata:
+      type: object
+      required: [version, fetchedAtEpochMillis, ageSeconds, stale, sourceRows, rejectedRows]
+      properties:
+        version: { type: string }
+        fetchedAtEpochMillis: { type: integer, format: int64 }
+        ageSeconds: { type: integer, format: int64 }
+        stale: { type: boolean }
+        sourceRows: { type: integer }
+        rejectedRows: { type: integer }
+    VpnServerSummary:
+      type: object
+      required: [id, hostName, ip, score, speedBps, countryName, countryCode, activeSessions, uptimeMillis, totalUsers, totalTrafficBytes, logType, operator, message, protocol]
+      properties:
+        id: { type: string }
+        hostName: { type: string }
+        ip: { type: string }
+        score: { type: integer, format: int64 }
+        pingMs: { type: [integer, "null"] }
+        speedBps: { type: integer, format: int64 }
+        countryName: { type: string }
+        countryCode: { type: string }
+        activeSessions: { type: integer }
+        uptimeMillis: { type: integer, format: int64 }
+        totalUsers: { type: integer, format: int64 }
+        totalTrafficBytes: { type: integer, format: int64 }
+        logType: { type: string }
+        operator: { type: string }
+        message: { type: string }
+        protocol: { $ref: "#/components/schemas/VpnProtocol" }
+        port: { type: [integer, "null"] }
+        softEtherTcpPort:
+          description: Native SoftEther SSL-VPN TCP listener parsed from VPN Gate HTML; omitted when unknown.
+          type: [integer, "null"]
+          minimum: 1
+          maximum: 65535
+        healthStatus: { $ref: "#/components/schemas/ServerHealthStatus" }
+        lastCheckedAtEpochMillis: { type: [integer, "null"], format: int64 }
+        lastSuccessfulAtEpochMillis: { type: [integer, "null"], format: int64 }
+        lastProbeDurationMs:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+          maximum: 600000
+          description: Total duration of the latest probe, whether it succeeded or failed.
+        lastSuccessfulConnectionTimeMs:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+          maximum: 600000
+          description: Connection time from the latest successful probe that reached CONNECTED.
+        consecutiveFailures: { type: integer, minimum: 0 }
+    ServersResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          required: [servers, page, source]
+          properties:
+            servers:
+              type: array
+              items: { $ref: "#/components/schemas/VpnServerSummary" }
+            page:
+              type: object
+              required: [offset, limit, returned, total, hasMore]
+              properties:
+                offset: { type: integer }
+                limit: { type: integer }
+                returned: { type: integer }
+                total: { type: integer }
+                hasMore: { type: boolean }
+            source: { $ref: "#/components/schemas/SourceMetadata" }
+    ServerConfigResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          required: [id, protocol, openVpnConfig, source]
+          properties:
+            id: { type: string }
+            protocol: { $ref: "#/components/schemas/VpnProtocol" }
+            port: { type: [integer, "null"] }
+            openVpnConfig: { type: string }
+            source: { $ref: "#/components/schemas/SourceMetadata" }
+    CountriesResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          required: [countries, source]
+          properties:
+            countries:
+              type: array
+              items:
+                type: object
+                required: [code, name, serverCount, protocols]
+                properties:
+                  code: { type: string }
+                  name: { type: string }
+                  serverCount: { type: integer }
+                  protocols:
+                    type: array
+                    items: { $ref: "#/components/schemas/VpnProtocol" }
+            source: { $ref: "#/components/schemas/SourceMetadata" }
+    HealthResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          required: [status, ready, serverCount]
+          properties:
+            status: { type: string, enum: [healthy, degraded, unavailable] }
+            ready: { type: boolean }
+            serverCount: { type: integer }
+            source:
+              oneOf:
+                - { $ref: "#/components/schemas/SourceMetadata" }
+                - { type: "null" }
+            lastRefreshAttemptAtEpochMillis: { type: [integer, "null"], format: int64 }
+            lastRefreshSuccessAtEpochMillis: { type: [integer, "null"], format: int64 }
+            lastRefreshError: { type: [string, "null"] }
+    ProbeResult:
+      type: object
+      required: [serverId, success, stage, durationMs, checkedAtEpochMillis]
+      properties:
+        serverId:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        success: { type: boolean }
+        stage:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Z][A-Z0-9_]*$"
+        reason: { type: [string, "null"], maxLength: 512 }
+        durationMs:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 600000
+          description: Total probe duration. A successful result must use stage CONNECTED.
+        checkedAtEpochMillis: { type: integer, format: int64, minimum: 1 }
+    ProbeResultAcceptedResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, const: true }
+        data:
+          type: object
+          required: [serverId, healthStatus, consecutiveFailures]
+          properties:
+            serverId: { type: string }
+            healthStatus: { $ref: "#/components/schemas/ServerHealthStatus" }
+            consecutiveFailures: { type: integer, minimum: 0 }
+    ErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, const: false }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }

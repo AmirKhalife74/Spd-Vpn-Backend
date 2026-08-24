@@ -1,0 +1,65 @@
+services:
+  api:
+    build: .
+    image: spdvpn/backend:local
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      VPN_GATE_SOURCE_URL: "${VPN_GATE_SOURCE_URL:-https://www.vpngate.net/api/iphone/}"
+      VPN_GATE_HTML_URL: "${VPN_GATE_HTML_URL:-https://www.vpngate.net/en/}"
+      VPN_GATE_REFRESH_INTERVAL_SECONDS: "${VPN_GATE_REFRESH_INTERVAL_SECONDS:-300}"
+      VPN_GATE_FETCH_TIMEOUT_SECONDS: "${VPN_GATE_FETCH_TIMEOUT_SECONDS:-30}"
+      VPN_GATE_CACHE_PATH: "/app/data/vpngate-cache.json"
+      HEALTH_SNAPSHOT_PATH: "/app/data/server-health.json"
+      VPN_GATE_MAX_STALE_SECONDS: "${VPN_GATE_MAX_STALE_SECONDS:-86400}"
+      RATE_LIMIT_REQUESTS: "${RATE_LIMIT_REQUESTS:-120}"
+      RATE_LIMIT_WINDOW_SECONDS: "${RATE_LIMIT_WINDOW_SECONDS:-60}"
+      CORS_ALLOWED_HOSTS: "${CORS_ALLOWED_HOSTS:-*}"
+      PROBER_SHARED_SECRET: "${PROBER_SHARED_SECRET:-}"
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - spdvpn-data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  prober:
+    profiles:
+      - prober
+    build:
+      context: .
+      dockerfile: Dockerfile.prober
+    image: spdvpn/prober:local
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      PROBER_API_BASE_URL: "http://api:8080"
+      PROBER_SHARED_SECRET: "${PROBER_SHARED_SECRET:-}"
+      PROBER_SWEEP_INTERVAL_SECONDS: "${PROBER_SWEEP_INTERVAL_SECONDS:-900}"
+      PROBER_INITIAL_JITTER_SECONDS: "${PROBER_INITIAL_JITTER_SECONDS:-30}"
+      PROBER_CONCURRENCY: "${PROBER_CONCURRENCY:-2}"
+      PROBER_PROBE_TIMEOUT_SECONDS: "${PROBER_PROBE_TIMEOUT_SECONDS:-35}"
+      PROBER_CONFIG_REQUEST_INTERVAL_MS: "${PROBER_CONFIG_REQUEST_INTERVAL_MS:-1100}"
+      PROBER_MAX_SERVERS_PER_SWEEP: "${PROBER_MAX_SERVERS_PER_SWEEP:-25}"
+      PROBER_RUN_ONCE: "${PROBER_RUN_ONCE:-false}"
+      PROBER_DRY_RUN: "${PROBER_DRY_RUN:-false}"
+    user: "10001:10001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m,mode=1777
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: "0.50"
+    stop_grace_period: 10s
+
+volumes:
+  spdvpn-data:
