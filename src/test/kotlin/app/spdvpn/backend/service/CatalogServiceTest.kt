@@ -68,12 +68,64 @@ class CatalogServiceTest {
         val after = service.currentSnapshot().servers.single { it.hostName == "vpn-tcp" }
         assertEquals(1, htmlFetches)
         assertEquals(995, after.softEtherTcpPort)
+        assertEquals("vpn-tcp.opengw.net", after.softEtherTlsServerName)
         assertEquals(before.id, after.id)
         assertEquals(before.hostName, after.hostName)
         assertEquals(before.ip, after.ip)
         assertEquals(before.protocol, after.protocol)
         assertEquals(before.port, after.port)
         assertEquals(before.openVpnConfig, after.openVpnConfig)
+    }
+
+    @Test
+    fun `old cached snapshots gain canonical TLS metadata without losing servers`() = runBlocking {
+        val csv = vpnGateCsv(
+            includeTcp = false,
+            firstHostName = "public-vpn-39",
+            firstIp = "219.100.37.3",
+        )
+        val oldSnapshot = VpnGateCsvParser().parse(csv).let { parsed ->
+            parsed.copy(
+                schemaVersion = 2,
+                servers = parsed.servers.map {
+                    it.copy(softEtherTcpPort = 443, softEtherTlsServerName = null)
+                },
+            )
+        }
+        val cacheStore = InMemoryCatalogCacheStore(oldSnapshot)
+        val service = service(
+            source = { error("refresh must not be required") },
+            cacheStore = cacheStore,
+        )
+
+        service.loadLastKnownGood()
+
+        val loaded = service.currentSnapshot()
+        assertEquals(3, loaded.schemaVersion)
+        assertEquals(1, loaded.servers.size)
+        assertEquals(443, loaded.servers.single().softEtherTcpPort)
+        assertEquals("public-vpn-39.opengw.net", loaded.servers.single().softEtherTlsServerName)
+        assertEquals(loaded, cacheStore.load())
+    }
+
+    @Test
+    fun `invalid TLS hostname disables only SoftEther metadata`() = runBlocking {
+        val csv = vpnGateCsv(
+            includeTcp = false,
+            firstHostName = "vpn.example.com",
+            firstIp = "198.51.100.10",
+        )
+        val service = service(
+            source = { csv },
+            htmlSource = VpnGateHtmlSource { softEtherHtmlFixture() },
+        )
+
+        assertIs<RefreshResult.Success>(service.refresh())
+
+        val server = service.currentSnapshot().servers.single()
+        assertNull(server.softEtherTcpPort)
+        assertNull(server.softEtherTlsServerName)
+        assertTrue(server.openVpnConfig.isNotBlank())
     }
 
     @Test
@@ -115,7 +167,7 @@ class CatalogServiceTest {
     fun `HTML failure retains safely matched cached metadata while CSV refresh succeeds`() = runBlocking {
         val csv = vpnGateCsv(
             includeTcp = false,
-            firstHostName = "vpn-udp.example.test",
+            firstHostName = "vpn-udp",
         )
         val cached = VpnGateCsvParser().parse(csv).let { snapshot ->
             snapshot.copy(
@@ -133,6 +185,7 @@ class CatalogServiceTest {
         assertIs<RefreshResult.Success>(service.refresh())
 
         assertEquals(443, service.currentSnapshot().servers.single().softEtherTcpPort)
+        assertEquals("vpn-udp.opengw.net", service.currentSnapshot().servers.single().softEtherTlsServerName)
         assertEquals("healthy", service.health().status)
     }
 

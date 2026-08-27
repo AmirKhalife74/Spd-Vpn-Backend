@@ -147,4 +147,5 @@ Health persistence is independent from the VPN Gate catalog. Entries that remain
 - A refresh that downloads invalid CSV is recorded as a failure and never replaces the current snapshot.
 - Protocol and port come from the actual OpenVPN profile embedded by VPN Gate. The backend does not invent a TCP variant when upstream only supplies UDP.
 - `softEtherTcpPort` comes only from the HTML table's SSL-VPN cell. It is omitted when unknown; the backend never assumes port 443.
+- `softEtherTlsServerName` is a canonical `*.opengw.net` TLS identity derived only from a valid VPN Gate hostname. Short single-label VPN Gate names are suffixed safely; IPs and unknown domains are rejected.
 - OpenVPN exists only in the opt-in prober image. The API image and API container privileges remain unchanged.

@@ -76,7 +76,9 @@ class ApiRoutesTest {
         val decoded = applicationJson().decodeFromString<ApiResponse<ServersData>>(body)
 
         assertEquals(995, decoded.data.servers.single().softEtherTcpPort)
+        assertEquals("vpn-tcp.opengw.net", decoded.data.servers.single().softEtherTlsServerName)
         assertTrue(body.contains("\"softEtherTcpPort\":995"))
+        assertTrue(body.contains("\"softEtherTlsServerName\":\"vpn-tcp.opengw.net\""))
     }
 
     private suspend fun readyService(): CatalogService {

@@ -14,6 +14,7 @@ import app.spdvpn.backend.model.SourceMetadata
 import app.spdvpn.backend.model.VpnProtocol
 import app.spdvpn.backend.model.VpnServerRecord
 import app.spdvpn.backend.source.SoftEtherPortState
+import app.spdvpn.backend.source.SoftEtherTlsServerNameCanonicalizer
 import app.spdvpn.backend.source.VpnGateCsvParser
 import app.spdvpn.backend.source.VpnGateHtmlParseResult
 import app.spdvpn.backend.source.VpnGateHtmlParser
@@ -74,13 +75,18 @@ class CatalogService(
         runCatching { cacheStore.load() }
             .onSuccess { cached ->
                 if (cached != null && cached.servers.isNotEmpty()) {
-                    snapshot.set(cached)
-                    healthTracker.reconcileCatalog(cached.servers.mapTo(mutableSetOf(), VpnServerRecord::id))
+                    val upgraded = upgradeCachedSnapshot(cached)
+                    snapshot.set(upgraded)
+                    healthTracker.reconcileCatalog(upgraded.servers.mapTo(mutableSetOf(), VpnServerRecord::id))
                     logger.info(
                         "Loaded {} cached VPN servers from snapshot {}",
-                        cached.servers.size,
-                        cached.version,
+                        upgraded.servers.size,
+                        upgraded.version,
                     )
+                    if (upgraded != cached) {
+                        runCatching { cacheStore.save(upgraded) }
+                            .onFailure { error -> logger.warn("Could not persist the upgraded VPN Gate cache", error) }
+                    }
                 }
             }
             .onFailure { error ->
@@ -177,21 +183,21 @@ class CatalogService(
         val enrichedServers = csvSnapshot.servers.map { server ->
             val current = currentIndex?.match(server)
             val cachedPort = cachedIndex?.match(server)?.softEtherTcpPort
-            val softEtherTcpPort = when (current?.portState) {
+            val candidatePort = when (current?.portState) {
                 SoftEtherPortState.KNOWN -> current.softEtherTcpPort
                 SoftEtherPortState.MISSING -> null
                 SoftEtherPortState.MALFORMED, null -> cachedPort.also {
                     if (it != null) cachedMetadataReusedCount++
                 }
             }
-            server.copy(softEtherTcpPort = softEtherTcpPort)
+            server.withCanonicalSoftEtherMetadata(candidatePort)
         }
         val knownPortCount = enrichedServers.count { it.softEtherTcpPort != null }
         val version = versionWithSoftEtherMetadata(csvSnapshot.version, enrichedServers)
 
         return SoftEtherEnrichmentResult(
             snapshot = csvSnapshot.copy(
-                schemaVersion = CURRENT_CATALOG_SCHEMA_VERSION,
+                schemaVersion = CURRENT_CATALOG_SCHEMA_VERSION_VALUE,
                 version = version,
                 servers = enrichedServers,
             ),
@@ -339,9 +345,38 @@ class CatalogService(
         private const val MAX_PROBE_DURATION_MS = 600_000L
         private const val MAX_FUTURE_CLOCK_SKEW_MILLIS = 5 * 60 * 1_000L
         private const val MAX_PROBE_RESULT_AGE_MILLIS = 24 * 60 * 60 * 1_000L
-        private const val CURRENT_CATALOG_SCHEMA_VERSION = 2
         private val VALID_PORT_RANGE = 1..65_535
     }
+}
+
+private fun upgradeCachedSnapshot(cached: CatalogSnapshot): CatalogSnapshot {
+    val upgradedServers = cached.servers.map { server ->
+        server.withCanonicalSoftEtherMetadata(server.softEtherTcpPort)
+    }
+    val requiresSchemaUpgrade = cached.schemaVersion < CURRENT_CATALOG_SCHEMA_VERSION_VALUE
+    if (!requiresSchemaUpgrade && upgradedServers == cached.servers) return cached
+
+    return cached.copy(
+        schemaVersion = CURRENT_CATALOG_SCHEMA_VERSION_VALUE,
+        version = if (requiresSchemaUpgrade) {
+            versionWithSoftEtherMetadata(cached.version, upgradedServers)
+        } else {
+            cached.version
+        },
+        servers = upgradedServers,
+    )
+}
+
+private fun VpnServerRecord.withCanonicalSoftEtherMetadata(candidatePort: Int?): VpnServerRecord {
+    val validPort = candidatePort?.takeIf { it in 1..65_535 }
+    val tlsServerName = validPort?.let {
+        SoftEtherTlsServerNameCanonicalizer.canonicalize(softEtherTlsServerName)
+            ?: SoftEtherTlsServerNameCanonicalizer.canonicalize(hostName)
+    }
+    return copy(
+        softEtherTcpPort = validPort?.takeIf { tlsServerName != null },
+        softEtherTlsServerName = tlsServerName,
+    )
 }
 
 private data class SoftEtherEnrichmentResult(
@@ -377,13 +412,17 @@ private fun versionWithSoftEtherMetadata(
     csvVersion: String,
     servers: List<VpnServerRecord>,
 ): String {
-    if (servers.none { it.softEtherTcpPort != null }) return csvVersion
-    val metadata = servers.joinToString(separator = "|") { "${it.id}:${it.softEtherTcpPort ?: "-"}" }
+    if (servers.none { it.softEtherTcpPort != null || it.softEtherTlsServerName != null }) return csvVersion
+    val metadata = servers.joinToString(separator = "|") {
+        "${it.id}:${it.softEtherTcpPort ?: "-"}:${it.softEtherTlsServerName ?: "-"}"
+    }
     val digest = MessageDigest.getInstance("SHA-256")
         .digest("$csvVersion|$metadata".toByteArray(Charsets.UTF_8))
         .joinToString(separator = "") { byte -> "%02x".format(byte) }
     return digest.take(32)
 }
+
+private const val CURRENT_CATALOG_SCHEMA_VERSION_VALUE = 3
 
 data class ServerQuery(
     val countryCode: String? = null,

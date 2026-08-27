@@ -30,11 +30,12 @@ data class VpnServerRecord(
     val port: Int? = null,
     val openVpnConfig: String,
     val softEtherTcpPort: Int? = null,
+    val softEtherTlsServerName: String? = null,
 )
 
 @Serializable
 data class CatalogSnapshot(
-    val schemaVersion: Int = 2,
+    val schemaVersion: Int = 3,
     val version: String,
     val fetchedAtEpochMillis: Long,
     val sourceRows: Int,
@@ -62,6 +63,7 @@ data class VpnServerSummary(
     val protocol: VpnProtocol,
     val port: Int? = null,
     val softEtherTcpPort: Int? = null,
+    val softEtherTlsServerName: String? = null,
     val healthStatus: ServerHealthStatus = ServerHealthStatus.UNKNOWN,
     val lastCheckedAtEpochMillis: Long? = null,
     val lastSuccessfulAtEpochMillis: Long? = null,
@@ -89,6 +91,7 @@ fun VpnServerRecord.toSummary(health: ServerHealthRecord? = null) = VpnServerSum
     protocol = protocol,
     port = port,
     softEtherTcpPort = softEtherTcpPort,
+    softEtherTlsServerName = softEtherTlsServerName,
     healthStatus = health?.status ?: ServerHealthStatus.UNKNOWN,
     lastCheckedAtEpochMillis = health?.lastCheckedAtEpochMillis,
     lastSuccessfulAtEpochMillis = health?.lastSuccessfulAtEpochMillis,

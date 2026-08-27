@@ -23,7 +23,14 @@ class FileCatalogCacheStoreTest {
         val snapshot = VpnGateCsvParser(clock = { 42L }).parse(vpnGateCsv()).let { parsed ->
             parsed.copy(
                 servers = parsed.servers.map { server ->
-                    if (server.hostName == "vpn-tcp") server.copy(softEtherTcpPort = 995) else server
+                    if (server.hostName == "vpn-tcp") {
+                        server.copy(
+                            softEtherTcpPort = 995,
+                            softEtherTlsServerName = "vpn-tcp.opengw.net",
+                        )
+                    } else {
+                        server
+                    }
                 },
             )
         }
@@ -34,6 +41,10 @@ class FileCatalogCacheStoreTest {
         assertNotNull(loaded)
         assertEquals(snapshot, loaded)
         assertEquals(995, loaded.servers.single { it.hostName == "vpn-tcp" }.softEtherTcpPort)
+        assertEquals(
+            "vpn-tcp.opengw.net",
+            loaded.servers.single { it.hostName == "vpn-tcp" }.softEtherTlsServerName,
+        )
         assertEquals(1, Files.list(path.parent).use { it.count() })
     }
 
@@ -45,10 +56,12 @@ class FileCatalogCacheStoreTest {
             .copy(schemaVersion = 1)
         val oldJson = json.encodeToString(oldSnapshot)
         assertFalse(oldJson.contains("softEtherTcpPort"))
+        assertFalse(oldJson.contains("softEtherTlsServerName"))
 
         val loaded = json.decodeFromString<CatalogSnapshot>(oldJson)
 
         assertEquals(1, loaded.schemaVersion)
         loaded.servers.forEach { assertNull(it.softEtherTcpPort) }
+        loaded.servers.forEach { assertNull(it.softEtherTlsServerName) }
     }
 }

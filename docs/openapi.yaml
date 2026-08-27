@@ -221,6 +221,10 @@ components:
           type: [integer, "null"]
           minimum: 1
           maximum: 65535
+        softEtherTlsServerName:
+          description: Canonical verified TLS server name for native SoftEther; omitted when it cannot be derived safely.
+          type: [string, "null"]
+          pattern: "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.opengw\\.net$"
         healthStatus: { $ref: "#/components/schemas/ServerHealthStatus" }
         lastCheckedAtEpochMillis: { type: [integer, "null"], format: int64 }
         lastSuccessfulAtEpochMillis: { type: [integer, "null"], format: int64 }
