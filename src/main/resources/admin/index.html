@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark"><title>مدیریت SPD Premium</title>
+  <link rel="stylesheet" href="/admin/styles.css"><script defer src="/admin/app.js"></script>
+</head>
+<body>
+  <main id="login" class="login-layout">
+    <section class="login-card">
+      <div class="brand"><span class="brand-mark">S</span><div><b>SPD VPN</b><small>پنل مدیریت سرویس</small></div></div>
+      <span class="eyebrow">کنترل پنل اختصاصی</span><h1>مدیریت، با دید روشن.</h1>
+      <p class="muted">حساب‌های SPD و اشتراک‌های Premium را از یک جا مدیریت کنید.</p>
+      <form id="login-form" class="stack">
+        <label>نام کاربری مدیر<input name="username" autocomplete="username" dir="ltr" maxlength="64" required></label>
+        <label>رمز عبور<input name="password" type="password" autocomplete="current-password" minlength="12" maxlength="256" required></label>
+        <button type="submit" class="primary">ورود امن به پنل <span aria-hidden="true">←</span></button>
+      </form>
+      <p id="login-error" role="alert" class="error"></p>
+      <p class="fine">حساب مدیر مستقل از حساب کاربران اپ است.</p>
+    </section>
+  </main>
+  <div id="workspace" class="workspace hidden">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">S</span><div><b>SPD VPN</b><small>مدیریت Premium</small></div></div>
+      <small class="nav-label">فضای مدیریت</small>
+      <nav aria-label="صفحات مدیریت">
+        <a href="#dashboard" data-page="dashboard">نمای کلی</a>
+        <a href="#users" data-page="users">کاربران و اشتراک‌ها</a>
+        <a href="#plans" data-page="plans">تنظیم پلن‌ها</a>
+        <a href="#free" data-page="free">سرورهای رایگان</a>
+        <a href="#content" data-page="content">انتشار نسخه و پیام</a>
+        <a href="#audit" data-page="audit">تاریخچهٔ عملیات</a>
+      </nav>
+      <div class="sidebar-footer"><small id="admin-name"></small><button id="logout" class="ghost">خروج امن</button></div>
+    </aside>
+    <div class="main-shell">
+      <header class="topbar"><div><span class="eyebrow">SPD CONTROL</span><h1 id="page-title">نمای کلی</h1></div><span class="chip">فضای مدیریت</span></header>
+      <main id="content" class="page-content" tabindex="-1" aria-live="polite"></main>
+      <footer>SPD VPN · داده‌های عملیاتی سرویس · زمان‌ها از سرور و نمایش به وقت دستگاه شما</footer>
+    </div>
+  </div>
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+</body>
+</html>

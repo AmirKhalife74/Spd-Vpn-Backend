@@ -1,0 +1,12 @@
+{
+  "name": "spd-ktor-admin-checks",
+  "private": true,
+  "scripts": {
+    "check": "node --check src/main/resources/admin/app.js",
+    "test": "node --test scripts/admin-api-test.mjs",
+    "test:browser": "node scripts/admin-browser-test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
+}
