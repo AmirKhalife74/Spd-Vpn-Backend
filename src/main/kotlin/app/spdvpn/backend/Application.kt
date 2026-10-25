@@ -1,5 +1,12 @@
 package app.spdvpn.backend
 
+import app.spdvpn.backend.premium.PremiumConfig
+import app.spdvpn.backend.premium.PremiumRuntime
+import app.spdvpn.backend.premium.PremiumProblem
+import app.spdvpn.backend.premium.premiumRoutes
+import app.spdvpn.backend.premium.premiumPublicRoutes
+import kotlinx.coroutines.runBlocking
+
 import app.spdvpn.backend.api.ApiBadRequestException
 import app.spdvpn.backend.api.ApiNotFoundException
 import app.spdvpn.backend.api.ApiUnauthorizedException
@@ -34,6 +41,7 @@ import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.compression.gzip
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.cors.routing.CORS
+import io.ktor.server.plugins.cors.CORSConfig
 import io.ktor.server.plugins.defaultheaders.DefaultHeaders
 import io.ktor.server.plugins.origin
 import io.ktor.server.plugins.ratelimit.RateLimit
@@ -41,6 +49,7 @@ import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.path
 import io.ktor.server.response.respond
 import io.ktor.server.routing.routing
+import io.ktor.server.routing.route
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -74,13 +83,18 @@ fun Application.module() {
         ),
     )
     val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val premiumConfig = PremiumConfig.fromEnvironment()
+    require(listOf(config.cachePath, config.healthSnapshotPath, premiumConfig.databasePath, premiumConfig.panelContentPath)
+        .map { it.toAbsolutePath().normalize() }.distinct().size == 4) { "Catalog, health, panel, and account storage paths must differ" }
+    val premium = runBlocking { PremiumRuntime.open(premiumConfig) }
     service.start(serviceScope)
-
-    configureApplication(service, config, json)
+    premium.start(serviceScope)
+    configureApplication(service, config, json, premium)
 
     monitor.subscribe(ApplicationStopping) {
         serviceScope.cancel()
         httpClient.close()
+        premium.close()
     }
 }
 
@@ -88,6 +102,7 @@ fun Application.configureApplication(
     service: CatalogService,
     config: AppConfig,
     json: Json = applicationJson(),
+    premium: PremiumRuntime? = null,
 ) {
     install(DefaultHeaders) {
         header("X-Content-Type-Options", "nosniff")
@@ -101,9 +116,12 @@ fun Application.configureApplication(
     }
     install(CallLogging) {
         level = Level.INFO
-        filter { call -> call.request.path().startsWith("/v1") }
+        filter { call -> call.request.path().startsWith("/v1") &&
+            !call.request.path().startsWith("/v1/account") && !call.request.path().startsWith("/v1/premium") }
     }
-    install(CORS) {
+    // Public API CORS is not admin authorization. Scope it away from same-origin admin routes:
+    // behind TLS termination, Ktor's local HTTP origin must not reject admin PUT before CSRF.
+    val publicCors: CORSConfig.() -> Unit = {
         allowMethod(HttpMethod.Get)
         allowHeader(HttpHeaders.ContentType)
         allowHeader(HttpHeaders.IfNoneMatch)
@@ -133,6 +151,10 @@ fun Application.configureApplication(
         }
     }
     install(StatusPages) {
+        exception<PremiumProblem> { call, error ->
+            call.response.headers.append(HttpHeaders.CacheControl, "no-store")
+            call.respondError(HttpStatusCode.fromValue(error.status), error.code, error.safeMessage)
+        }
         exception<ApiBadRequestException> { call, error ->
             call.respondError(HttpStatusCode.BadRequest, "BAD_REQUEST", error.message.orEmpty())
         }
@@ -159,7 +181,10 @@ fun Application.configureApplication(
         }
         exception<Throwable> { call, error ->
             if (error is CancellationException) throw error
-            call.application.environment.log.error("Unhandled request error", error)
+            if (call.request.path().startsWith("/admin") || call.request.path().startsWith("/v1/account") ||
+                call.request.path().startsWith("/v1/premium")) {
+                call.application.environment.log.error("Private API request failed (details suppressed)")
+            } else call.application.environment.log.error("Unhandled request error", error)
             call.respondError(
                 HttpStatusCode.InternalServerError,
                 "INTERNAL_ERROR",
@@ -168,7 +193,12 @@ fun Application.configureApplication(
         }
     }
     routing {
-        apiRoutes(service, config.proberSharedSecret, json)
+        route("/") {
+            install(CORS, publicCors)
+            apiRoutes(service, config.proberSharedSecret, json)
+            if (premium != null) premiumPublicRoutes(premium, json)
+        }
+        if (premium != null) premiumRoutes(premium, service, json)
     }
 }
 

@@ -2,7 +2,15 @@
 
 Small Ktor service that downloads VPN Gate's public CSV catalog outside the filtered network, validates it, keeps a last-known-good disk cache, and exposes a compact JSON API to SPD VPN clients.
 
-This first phase deliberately has no database, user accounts, premium servers, or fake fallback data.
+The existing Free catalog stays public and backward compatible. The same Ktor application now
+also serves a Persian admin panel, durable SPD accounts/sessions and a server-side PasarGuard
+Premium adapter. No mock or fallback VPN accounts/configurations are enabled at runtime.
+
+See [Premium setup and operation](docs/premium/setup.md),
+[Android API contract](docs/premium/android-api.md), and
+[pinned PasarGuard contract](docs/premium/pasarguard-v5.4.1.md).
+The admin UI is served at `/admin` from JAR resources, reusing the existing lightweight panel
+structure. Node is required only for frontend checks/browser tests, not for serving production.
 
 ## What it does
 

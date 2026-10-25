@@ -30,11 +30,22 @@ dependencies {
     implementation("io.ktor:ktor-client-cio")
 
     implementation("org.jsoup:jsoup:1.23.1")
+    implementation("org.xerial:sqlite-jdbc:3.49.1.0")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.80")
 
     implementation("ch.qos.logback:logback-classic:1.5.33")
 
     testImplementation("io.ktor:ktor-server-test-host")
     testImplementation(kotlin("test-junit"))
+}
+
+tasks.register<JavaExec>("bootstrapAdmin") {
+    group = "administration"
+    description = "Create the first SPD administrator from a password on stdin (no default password)."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("app.spdvpn.backend.premium.BootstrapAdminKt")
+    standardInput = System.`in`
+    args(providers.gradleProperty("adminUsername").orElse("").get(), "--password-stdin")
 }
 
 application {
@@ -53,4 +64,9 @@ ktor {
     fatJar {
         archiveFileName.set("spd-vpn-backend-all.jar")
     }
+}
+
+// Bouncy Castle is used as a library; upstream JAR signatures cannot describe a merged fat JAR.
+tasks.withType<Jar>().configureEach {
+    exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA")
 }

@@ -94,11 +94,19 @@ class CatalogService(
             }
     }
 
-    suspend fun refresh(): RefreshResult = refreshMutex.withLock {
+    suspend fun refresh(): RefreshResult = refreshMutex.withLock { refreshLocked() }
+
+    /** Administrative refresh shares the scheduler lock instead of queuing duplicate downloads. */
+    suspend fun refreshIfIdle(): RefreshResult? {
+        if (!refreshMutex.tryLock()) return null
+        return try { refreshLocked() } finally { refreshMutex.unlock() }
+    }
+
+    private suspend fun refreshLocked(): RefreshResult {
         val attemptAt = clock()
         lastRefreshAttempt.set(attemptAt)
 
-        try {
+        return try {
             val downloaded = source.fetch()
             val csvSnapshot = parser.parse(downloaded)
             val previousSnapshot = snapshot.get()
